@@ -21,6 +21,7 @@ set -o nounset                              # Treat unset variables as an error
 
 
 declare -a NIC="";
+declare -a NICIP=([0]="null");
 
 
 
@@ -40,6 +41,31 @@ function getNic(){
   fi
 
 }
+
+#---  FUNCTION  ----------------------------------------------------------------
+#          NAME:  getNicIP
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#-------------------------------------------------------------------------------
+function getNicIP(){
+    if [ -n "$1" ] ; then
+      for i in $@ ; do
+	tip=`/sbin/ifconfig $i | grep inet | cut -d : -f 2 | cut -d " " -f 1`
+	if [ -z "$tip" ] ;then
+
+		tip="noIP"
+	fi
+
+        NICIP=(  "${NICIP[@]}" "$tip" )
+      done
+    else
+      echo "none"
+      exit 0
+    fi
+
+}
+
 
 
 #---  FUNCTION  ----------------------------------------------------------------
@@ -68,9 +94,13 @@ function format_speed(){
 #===============================================================================
 
 getNic ;
+getNicIP $NIC;
+#echo $NIC;
+#echo $NICIP
 
 while [ "1" ]
   do
+
     declare -a RXpre=([0]="null");
     declare -a TXpre=([0]="null");
     declare -a RXnext=([0]="null");
@@ -94,17 +124,21 @@ while [ "1" ]
     done
 
       echo  -e  "\t `date +%k:%M:%S`"
-      printf "\t%s\t%s\n" RX TX;
+      printf "%10s\t%10s\t%10s\t%10s\n" NIC IP RX TX;
+       echo "---------------------------------------------------------------------------------"   
       i=1
     for eth in $NIC; do
       RX=$((${RXnext[$i]}-${RXpre[$i]}))
       TX=$((${TXnext[$i]}-${TXpre[$i]}))
       RX=$(format_speed $RX);
       TX=$(format_speed $TX);
+      IP=${NICIP[$i]};
     
-      printf "%s\t%s\t%s\n" $eth $RX $TX
+      printf "%10s\t%10s\t%10s\t%10s\n" $eth $IP $RX $TX
       i=$(( $i + 1 ));
     done
+    echo "---------------------------------------------------------------------------------"
+    echo 
    # eth=$1
    # RXpre=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$eth'"){print $2}}')
    # TXpre=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$eth'"){print $10}}')
