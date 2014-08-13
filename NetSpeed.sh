@@ -17,14 +17,14 @@
 #      REVISION:  ---
 #===============================================================================
 
-set -o nounset                              # Treat unset variables as an error
+#set -o nounset                              # Treat unset variables as an error
 
 
 declare -a NIC="";
 declare -a NICIP=([0]="null");
-
-
-
+declare -i INTERVAL=1;
+declare -i COUNT=-1;
+declare -i ARGS=2;
 #---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  getNic
 #   DESCRIPTION:  
@@ -34,7 +34,12 @@ declare -a NICIP=([0]="null");
 function getNic(){
 
   if [ -f /sbin/ifconfig ] ; then
+    if [ "$OS" = "SunOS" ] ; then
+      NIC=$(ifconfig -a|awk '$0!~/LOOPBACK/&&$2~/flags/{print $1}'|sed 's/.$//')
+    else
     NIC=$(/sbin/ifconfig -a|awk '$0~/Ethernet/{print $1}')
+    fi
+
   else
     echo "/sbin/ifconfig: command not found"
     exit 0;
@@ -89,17 +94,19 @@ function format_speed(){
 
 }
 
-#===============================================================================
-#  MAIN SCRIPT
-#===============================================================================
 
-getNic ;
-getNicIP $NIC;
-#echo $NIC;
-#echo $NICIP
+#---  FUNCTION  ----------------------------------------------------------------
+#          NAME:  getNicSpeed
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#-------------------------------------------------------------------------------
+function getNicSpeed(){
 
-while [ "1" ]
-  do
+printf "%10s\t%10s\t%10s\t%10s\t%10s\n" TIME NIC RX TX IP;
+Index=0 ;
+while [ "$Index" -ne $COUNT ] ; 
+do
 
     declare -a RXpre=([0]="null");
     declare -a TXpre=([0]="null");
@@ -113,7 +120,7 @@ while [ "1" ]
       TXpre=( "${TXpre[@]}" "$TXpre_tmp");
     done
 
-    sleep 1
+    sleep $INTERVAL
     #clear;
     
     for eth in $NIC; do
@@ -123,9 +130,9 @@ while [ "1" ]
       TXnext=( "${TXnext[@]}" "$TXnext_tmp")
     done
 
-      echo  -e  "\t `date +%k:%M:%S`"
-      printf "%10s\t%10s\t%10s\t%10s\n" NIC IP RX TX;
-       echo "---------------------------------------------------------------------------------"   
+      NOWDATE=`date +%k:%M:%S`
+      #printf "%10s\t%10s\t%10s\t%10s\n" NIC RX TX IP;
+      # echo "---------------------------------------------------------------------------------"   
       i=1
     for eth in $NIC; do
       RX=$((${RXnext[$i]}-${RXpre[$i]}))
@@ -134,27 +141,50 @@ while [ "1" ]
       TX=$(format_speed $TX);
       IP=${NICIP[$i]};
     
-      printf "%10s\t%10s\t%10s\t%10s\n" $eth $IP $RX $TX
+      printf "%10s\t%10s\t%10s\t%10s\t%10s\n" $NOWDATE $eth $RX $TX $IP
       i=$(( $i + 1 ));
     done
-    echo "---------------------------------------------------------------------------------"
-    echo 
-   # eth=$1
-   # RXpre=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$eth'"){print $2}}')
-   # TXpre=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$eth'"){print $10}}')
-   # sleep 1
-   # RXnext=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$eth'"){print $2}}')
-   # TXnext=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$eth'"){print $10}}')
-   # echo  -e  "\t RX `date +%k:%M:%S` TX"
-   # RX=$((${RXnext}-${RXpre}))
-   # TX=$((${TXnext}-${TXpre}))
-#
- #   RX=$(format_speed $RX);
-  #  TX=$(format_speed $TX);
-    
-   # echo -e "$eth \t $RX   $TX "
+    #echo "---------------------------------------------------------------------------------"
+    #echo 
+
     unset RXpre
     unset TXpre
     unset RXnext
     unset TXpre
+    Index=$(($Index+1))
 done
+
+}
+
+#===============================================================================
+#  MAIN SCRIPT
+#===============================================================================
+
+if [ $# -gt "$ARGS" ] 
+  then
+  echo "Usage: `basename $0` {--help| [INTERVAL] [COUNT] }"
+  exit 0;
+fi
+if [ $# -ne 0 ] ;
+then
+case "$1" in 
+      --help)
+        echo "Usage: $0 {--help| [INTERVAL] [COUNT] }"
+        exit 0;
+        ;;
+      *)
+        INTERVAL=$1;
+        if [ $# -gt 1 ] ; then
+          COUNT=$2;
+        fi;
+        ;;
+esac;
+fi
+
+OS=`uname`
+getNic ;
+getNicIP $NIC;
+#echo $NIC;
+#echo $NICIP
+getNicSpeed;
+
