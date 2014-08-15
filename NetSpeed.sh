@@ -1,4 +1,4 @@
-#!/bin/bash - 
+#!/usr/bin/env bash 
 #===============================================================================
 #
 #          FILE: NetSpeed.sh
@@ -19,12 +19,13 @@
 
 #set -o nounset                              # Treat unset variables as an error
 
-
+LANG=C
 declare -a NIC="";
 declare -a NICIP=([0]="null");
 declare -i INTERVAL=1;
 declare -i COUNT=-1;
 declare -i ARGS=2;
+
 #---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  getNic
 #   DESCRIPTION:  
@@ -34,18 +35,33 @@ declare -i ARGS=2;
 function getNic(){
 
   if [ -f /sbin/ifconfig ] ; then
-    if [ "$OS" = "SunOS" ] ; then
-      NIC=$(ifconfig -a|awk '$0!~/LOOPBACK/&&$2~/flags/{print $1}'|sed 's/.$//')
-    else
     NIC=$(/sbin/ifconfig -a|awk '$0~/Ethernet/{print $1}')
-    fi
-
   else
     echo "/sbin/ifconfig: command not found"
     exit 0;
   fi
 
 }
+
+
+#---  FUNCTION  ----------------------------------------------------------------
+#          NAME:  getNic_Solaris
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#-------------------------------------------------------------------------------
+function getNic_Solaris(){
+  if [ -f /usr/sbin/ifconfig ] ; then
+    NIC=$(/usr/sbin/ifconfig -a |awk -F":" '$0~/UP/{print $1}')
+  else
+    echo "/usr/sbin/ifconfig: command not found"
+    exit 0;
+  fi
+    
+
+}
+
+
 
 #---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  getNicIP
@@ -71,6 +87,29 @@ function getNicIP(){
 
 }
 
+
+#---  FUNCTION  ----------------------------------------------------------------
+#          NAME:  getNicIP_Solaris
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#-------------------------------------------------------------------------------
+function getNicIP_Solaris(){
+  if [ -n "$1" ] ; then
+      for i in $@ ; do
+	  tip=` /usr/sbin/ifconfig $i|awk '$0~/inet/{print $2}'`
+	if [ -z "$tip" ] ;then
+
+		tip="noIP"
+	fi
+
+        NICIP=(  "${NICIP[@]}" "$tip" )
+      done
+    else
+      echo "none"
+      exit 0
+    fi
+}
 
 
 #---  FUNCTION  ----------------------------------------------------------------
@@ -156,6 +195,73 @@ done
 
 }
 
+
+#---  FUNCTION  ----------------------------------------------------------------
+#          NAME:  getNicSpeed_Solaris
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#-------------------------------------------------------------------------------
+function getNicSpeed_Solaris(){
+   if [ !-f /usr/bin/kstat ] ; then   
+        echo "/usr/bin/kstat: command not found"
+   fi
+
+printf "%10s\t%10s\t%10s\t%10s\t%10s\n" TIME NIC RX TX IP;
+Index=0 ;
+while [ "$Index" -ne $COUNT ] ; 
+do
+
+    declare -a RXpre=([0]="null");
+    declare -a TXpre=([0]="null");
+    declare -a RXnext=([0]="null");
+    declare -a TXnext=([0]="null");
+ 
+    for eth in $NIC; do
+      RXpre_tmp=$(/usr/bin/kstat -n $eth |awk '{if($1=="rbytes"){print $2}}')
+      TXpre_tmp=$(/usr/bin/kstat -n $eth |awk '{if($1=="obytes"){print $2}}')
+      RXpre=( "${RXpre[@]}" "$RXpre_tmp");
+      TXpre=( "${TXpre[@]}" "$TXpre_tmp");
+    done
+
+    sleep $INTERVAL
+    #clear;
+    
+    for eth in $NIC; do
+      RXnext_tmp=$(/usr/bin/kstat -n $eth |awk '{if($1=="rbytes"){print $2}}')
+      TXnext_tmp=$(/usr/bin/kstat -n $eth |awk '{if($1=="obytes"){print $2}}')
+      RXnext=( "${RXnext[@]}" "$RXnext_tmp")
+      TXnext=( "${TXnext[@]}" "$TXnext_tmp")
+    done
+
+      NOWDATE=`date +%k:%M:%S`
+      #printf "%10s\t%10s\t%10s\t%10s\n" NIC RX TX IP;
+      # echo "---------------------------------------------------------------------------------"   
+      i=1
+    for eth in $NIC; do
+      RX=$((${RXnext[$i]}-${RXpre[$i]}))
+      TX=$((${TXnext[$i]}-${TXpre[$i]}))
+      RX=$(format_speed $RX);
+      TX=$(format_speed $TX);
+      IP=${NICIP[$i]};
+    
+      printf "%10s\t%10s\t%10s\t%10s\t%10s\n" $NOWDATE $eth $RX $TX $IP
+      i=$(( $i + 1 ));
+    done
+    #echo "---------------------------------------------------------------------------------"
+    #echo 
+
+    unset RXpre
+    unset TXpre
+    unset RXnext
+    unset TXpre
+    Index=$(($Index+1))
+done
+
+}
+
+
+
 #===============================================================================
 #  MAIN SCRIPT
 #===============================================================================
@@ -181,10 +287,27 @@ case "$1" in
 esac;
 fi
 
-OS=`uname`
-getNic ;
-getNicIP $NIC;
-#echo $NIC;
-#echo $NICIP
-getNicSpeed;
+OSType=`uname`
+
+case "$OSType" in
+  Linux)
+    getNic ;
+    getNicIP $NIC;
+    #echo $NIC;
+    #echo $NICIP
+    getNicSpeed;
+    ;;
+  SunOS)
+    getNic_Solaris;
+    getNicIP_Solaris $NIC
+    getNicSpeed_Solaris;
+    ;;
+  *)
+    echo "not suppert!"
+    exit 0;
+    ;;
+
+esac    # --- end of case ---
+
+
 
