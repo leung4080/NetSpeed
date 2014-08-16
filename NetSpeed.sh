@@ -34,7 +34,7 @@ declare -i ARGS=2;
 #-------------------------------------------------------------------------------
 function getNICs(){
 
-case `uname` in
+case "$OSType" in
   Linux)
     if [ -f /sbin/ifconfig ] ; then
       NIC=$(/sbin/ifconfig -a|awk '$0~/Ethernet/{print $1}')
@@ -72,7 +72,7 @@ function getNICIP(){
     if [ -n "$1" ] ; then
       for i in $@ ; do
 
-        case `uname`  in
+        case "$OSType"  in
           Linux)
               tip=`/sbin/ifconfig $i | grep inet | cut -d : -f 2 | cut -d " " -f 1`
             ;;
@@ -105,7 +105,7 @@ function getNICIP(){
 #-------------------------------------------------------------------------------
 function getNIC_Traffic(){
     ETH=$1;
-    OS_and_DIRECT=`uname`"_$2"
+    OS_and_DIRECT="$OSType""_""$2"
     case $OS_and_DIRECT in
       Linux_RX)
           VAR=$(cat /proc/net/dev |tr : " "|awk '{if($1=="'$ETH'"){print $2}}')
@@ -144,11 +144,12 @@ function getNIC_Traffic(){
 function format_speed(){
       X=""; 
   if [[ $1 -lt 1024 ]];then
-      X="${1}B/s"
+      #X="${1}B/s"
+      X=$(echo $1 | awk '{printf "%.0f%s\n",$1,"B/s"}')
     elif [[ $1 -gt 1048576 ]];then
-      X=$(echo $1 | awk '{print $1/1048576 "MB/s"}')
+      X=$(echo $1 | awk '{printf "%.2f%s\n",$1/1048576,"MB/s"}')
     else
-      X=$(echo $1 | awk '{print $1/1024 "KB/s"}')
+      X=$(echo $1 | awk '{printf "%.2f%s\n",$1/1024,"KB/s"}')
     fi
     echo $X
     return 0;
@@ -180,7 +181,6 @@ do
       RXpre=( "${RXpre[@]}" "$RXpre_tmp");
       TXpre=( "${TXpre[@]}" "$TXpre_tmp");
     done
-
     sleep $INTERVAL
     #clear;
     
@@ -190,7 +190,6 @@ do
       RXnext=( "${RXnext[@]}" "$RXnext_tmp")
       TXnext=( "${TXnext[@]}" "$TXnext_tmp")
     done
-
       NOWDATE=`date +%k:%M:%S`
       #printf "%10s\t%10s\t%10s\t%10s\n" NIC RX TX IP;
       # echo "---------------------------------------------------------------------------------"   
@@ -198,6 +197,8 @@ do
     for eth in $NIC; do
       RX=$((${RXnext[$i]}-${RXpre[$i]}))
       TX=$((${TXnext[$i]}-${TXpre[$i]}))
+      RX=$(($RX/$INTERVAL)) 
+      TX=$(($TX/$INTERVAL))
       RX=$(format_speed $RX);
       TX=$(format_speed $TX);
       IP=${NICIP[$i]};
@@ -208,6 +209,7 @@ do
     #echo "---------------------------------------------------------------------------------"
     #echo 
 
+    echo ;
     unset RXpre
     unset TXpre
     unset RXnext
@@ -243,7 +245,7 @@ case "$1" in
 esac;
 fi
 
-#OSType=`uname`
+OSType=`uname`
 
     getNICs ;
     getNICIP $NIC;
