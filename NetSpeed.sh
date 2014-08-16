@@ -24,7 +24,8 @@ declare -a NIC="";
 declare -a NICIP=([0]="null");
 declare -i INTERVAL=1;
 declare -i COUNT=-1;
-declare -i ARGS=2;
+declare -i ARGS=4;
+declare -a Script_USAGE="Usage: `basename $0` {--help| [-I Interface ] [INTERVAL] [COUNT] }"
 
 #---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  getNICs
@@ -135,6 +136,26 @@ function getNIC_Traffic(){
 }
 
 #---  FUNCTION  ----------------------------------------------------------------
+#          NAME:  Chk_NIC
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#-------------------------------------------------------------------------------
+function getIFCONFIG_CMD(){
+
+    case "$OSType" in
+      Linux)
+        IFCONFIG=/sbin/ifconfig
+        ;;
+
+      SunOS)
+        IFCONFIG=/usr/sbin/ifconfig 
+        ;;
+    esac    # --- end of case ---
+
+}
+
+#---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  format_speed
 #   DESCRIPTION:  
 #    PARAMETERS:  
@@ -165,7 +186,8 @@ function format_speed(){
 #-------------------------------------------------------------------------------
 function getNICSpeed(){
 
-printf "%10s\t%10s\t%10s\t%10s\t%10s\n" TIME NIC RX TX IP;
+printf "%8s\t%10s\t%10s\t%10s\t%10s\n\n" TIME NIC RX TX IP;
+
 Index=0 ;
 while [ "$Index" -ne $COUNT ] ; 
 do
@@ -181,6 +203,7 @@ do
       RXpre=( "${RXpre[@]}" "$RXpre_tmp");
       TXpre=( "${TXpre[@]}" "$TXpre_tmp");
     done
+    OLDDATE=`date +%k:%M:%S`
     sleep $INTERVAL
     #clear;
     
@@ -202,8 +225,8 @@ do
       RX=$(format_speed $RX);
       TX=$(format_speed $TX);
       IP=${NICIP[$i]};
-    
-      printf "%10s\t%10s\t%10s\t%10s\t%10s\n" $NOWDATE $eth $RX $TX $IP
+      #DATE=$OLDDATE" - "$NOWDATE;
+      printf "%8s\t%10s\t%10s\t%10s\t%10s\n" $NOWDATE $eth $RX $TX $IP
       i=$(( $i + 1 ));
     done
     #echo "---------------------------------------------------------------------------------"
@@ -223,31 +246,84 @@ done
 #===============================================================================
 #  MAIN SCRIPT
 #===============================================================================
+USAGE_HELP=`echo $* |grep "\-\-help"|wc -l`
 
-if [ $# -gt "$ARGS" ] 
-  then
-  echo "Usage: `basename $0` {--help| [INTERVAL] [COUNT] }"
-  exit 0;
+if [[ $# -gt $ARGS ]] ||  [[ $USAGE_HELP -ne 0 ]]; then
+    echo $Script_USAGE;
+    exit;
+else
+    for i in $*; do
+        case "$1" in
+        -I)
+                INTERFACE="1";
+                shift;
+                INTERFACE=$1;
+                #echo $INTERFACE;
+                #continue
+                ;;
+        *)
+            if [[ -z $1 ]] ; then
+                continue;
+            fi
+              
+            TEST_NUM=`echo $1| awk '{if($0~/^[0-9]*$/){print "number"}else{print "string"}}'`
+            if [[ $TEST_NUM == "string" ]] ; then
+                echo "err"
+                exit;
+            fi
+            if [[ -z $COUNT_SET ]] && [[ -n $INTERVAL_SET ]]; then
+                CONUT_SET=1;
+                COUNT=$1;
+            fi
+            if [[ -z $INTERVAL_SET ]] ; then
+                INTERVAL_SET=1;
+                INTERVAL=$1;
+            fi
+            
+                ;;
+
+        esac
+        shift
+    done
 fi
-if [ $# -ne 0 ] ;
-then
-case "$1" in 
-      --help)
-        echo "Usage: $0 {--help| [INTERVAL] [COUNT] }"
-        exit 0;
-        ;;
-      *)
-        INTERVAL=$1;
-        if [ $# -gt 1 ] ; then
-          COUNT=$2;
-        fi;
-        ;;
-esac;
-fi
+
+
+
+#if [ $# -gt "$ARGS" ] 
+#  then
+#  echo $Script_USAGE;
+#  exit 0;
+#fi
+#if [ $# -ne 0 ] ;
+#then
+#case "$1" in 
+#      --help)
+#        echo $Script_USAGE;
+#        exit 0;
+#        ;;
+#      *)
+#        INTERVAL=$1;
+#        if [ $# -gt 1 ] ; then
+#          COUNT=$2;
+#        fi;
+#        ;;
+#esac;
+#fi
 
 OSType=`uname`
+getIFCONFIG_CMD;
 
+if [[ -z $INTERFACE ]] ; then
     getNICs ;
+else
+    $IFCONFIG $INTERFACE 2>/dev/null 1>&2;
+    if [[ $? -ne 0  ]] ; then
+      echo "$INTERFACE: no such interface"
+      echo $Script_USAGE;
+      exit;
+    fi
+    NIC=$INTERFACE;
+fi;
     getNICIP $NIC;
     #echo $NIC;
     #echo $NICIP
