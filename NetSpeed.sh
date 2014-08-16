@@ -268,7 +268,7 @@ else
               
             TEST_NUM=`echo $1| awk '{if($0~/^[0-9]*$/){print "number"}else{print "string"}}'`
             if [[ $TEST_NUM == "string" ]] ; then
-                echo "err"
+                echo " $1 :bad argument "
                 exit;
             fi
             if [[ -z $COUNT_SET ]] && [[ -n $INTERVAL_SET ]]; then
